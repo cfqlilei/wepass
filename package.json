@@ -1,0 +1,29 @@
+{
+  "name": "wepassword-tests",
+  "version": "1.0.0",
+  "description": "密码管理软件测试套件",
+  "scripts": {
+    "test": "playwright test --reporter=list",
+    "test:e2e": "playwright test tests/e2e-*.test.js --reporter=list",
+    "test:unit": "playwright test tests/unit-*.test.js --reporter=list",
+    "test:integration": "playwright test tests/integration-*.test.js --reporter=list",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report --host=127.0.0.1 --port=9323"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  },
+  "main": "playwright.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "dependencies": {
+    "playwright": "^1.55.1",
+    "playwright-core": "^1.55.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

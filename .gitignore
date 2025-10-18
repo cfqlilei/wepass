@@ -1,0 +1,20 @@
+src/frontend/node_modules/**
+test-results/**
+logs/**
+src/logs/**
+node_modules/**
+playwright-report/**
+src/demo_vault.db
+
+src/build/**
+
+src/frontend/dist/**
+src/build/bin/wepass.app/Contents/MacOS/wepass
+src/build/bin/wepass.app/Contents/MacOS/wepass
+src/logs/20251002-wepass-debug.log
+src/logs/20251002-wepass-error.log
+src/logs/20251002-wepass-info.log
+src/build/bin/wepass.app/Contents/MacOS/data/My_pass 2.db
+src/build/bin/wepass.app/Contents/MacOS/data/my_pass.db
+build/**
+tests/test-results/**

@@ -1,0 +1,138 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build wails",
+            "type": "shell",
+            "command": "go mod tidy && go mod download && cd src/frontend && npm install && npm run build && cd ../../ && go install github.com/wailsapp/wails/v2/cmd/wails@latest && $(go env GOPATH)/bin/wails build -f -b",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "frontend-build",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/src/frontend && npm install && npm run build",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "frontend-watch",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/src/frontend && npm install && npm run dev",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "vite",
+                "pattern": {
+                    "regexp": "^(.*)$",
+                    "file": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".*Local:.*",
+                    "endsPattern": ".*ready in.*"
+                }
+            }
+        },
+        {
+            "label": "wails-dev",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/src && $(go env GOPATH)/bin/wails dev",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "isBackground": true,
+            "dependsOn": "frontend-build",
+            "problemMatcher": {
+                "owner": "wails",
+                "pattern": {
+                    "regexp": "^(.*)$",
+                    "file": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".*Building application.*",
+                    "endsPattern": ".*启动完成.*"
+                }
+            }
+        },
+        {
+            "label": "dev-watch",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "frontend-build",
+                "wails-dev"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "isBackground": true
+        },
+        {
+            "label": "wails-dev-windows",
+            "type": "shell",
+            "command": "${workspaceFolder}/start-wails-dev-en.bat",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "isBackground": false,
+            "windows": {
+                "command": "${workspaceFolder}\\start-wails-dev-en.bat"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "dev-watch-windows",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "frontend-build",
+                "wails-dev-windows"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "isBackground": true
+        }
+    ]
+}

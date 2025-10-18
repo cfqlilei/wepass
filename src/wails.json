@@ -1,0 +1,28 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "wepass",
+  "outputfilename": "wepass",
+  "frontend": {
+    "dir": "./frontend",
+    "install": "npm install",
+    "build": "npm run build",
+    "dev": "npm run dev",
+    "package": {
+      "manager": "npm"
+    }
+  },
+  "author": {
+    "name": "陈凤庆",
+    "email": "cfq@example.com"
+  },
+  "info": {
+    "companyName": "wepass",
+    "productName": "wepass 密码管理工具",
+    "productVersion": "1.0.3",
+    "copyright": "Copyright © 2025 陈凤庆. All rights reserved.",
+    "comments": "基于 Wails + Go + Vue.js 的跨平台密码管理工具"
+  },
+  "nsisType": "multiple",
+  "obfuscated": false,
+  "garbleargs": ""
+}

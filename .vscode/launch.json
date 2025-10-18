@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Wails App",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "echo 'Starting Wails development environment...'",
+            "env": {
+                "GOPATH": "${env:GOPATH}"
+            },
+            "preLaunchTask": "dev-watch"
+        },
+        {
+            "name": "Launch Wails App (Windows)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "Write-Host 'Starting Wails development environment for Windows...'; Write-Host 'If Go is not installed, please run: .\\install-go.ps1'; Write-Host 'Then restart VSCode and try again.'",
+            "env": {
+                "GOPATH": "${env:GOPATH}",
+                "GOOS": "windows",
+                "GOARCH": "amd64"
+            },
+            "preLaunchTask": "wails-dev-windows",
+            "windows": {
+                "command": "Write-Host 'Starting Wails development environment for Windows...'; Write-Host 'If Go is not installed, please run: .\\install-go.ps1'; Write-Host 'Then restart VSCode and try again.'"
+            }
+        }
+    ]
+}
