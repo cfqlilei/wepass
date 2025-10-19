@@ -9,7 +9,7 @@
 set -e
 
 # 版本信息
-VERSION="1.0.3"
+VERSION="1.0.7"
 APP_NAME="wepass"
 BUILD_DATE=$(date +%Y%m%d)
 

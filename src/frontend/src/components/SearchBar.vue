@@ -19,7 +19,8 @@ import { Search } from '@element-plus/icons-vue'
  * 搜索栏组件
  * @author 陈凤庆
  * @date 20251001
- * @description 提供搜索输入框和搜索逻辑
+ * @description 提供搜索输入框和搜索逻辑，支持防抖机制
+ * @modify 20251018 陈凤庆 添加防抖机制，避免快速输入时发送过多请求
  */
 export default {
   name: 'SearchBar',
@@ -31,11 +32,16 @@ export default {
     modelValue: {
       type: String,
       default: ''
+    },
+    debounceDelay: {
+      type: Number,
+      default: 300 // 防抖延迟时间，单位毫秒
     }
   },
   emits: ['update:modelValue', 'search', 'clear'],
   setup(props, { emit }) {
     const keyword = ref(props.modelValue)
+    let debounceTimer = null
 
     // 监听 modelValue 变化
     watch(() => props.modelValue, (newValue) => {
@@ -43,11 +49,20 @@ export default {
     })
 
     /**
-     * 处理输入事件
+     * 处理输入事件 - 带防抖
      */
     const handleInput = () => {
       emit('update:modelValue', keyword.value)
-      emit('search', keyword.value)
+
+      // 清除之前的防抖计时器
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+
+      // 设置新的防抖计时器
+      debounceTimer = setTimeout(() => {
+        emit('search', keyword.value)
+      }, props.debounceDelay)
     }
 
     /**
@@ -56,6 +71,12 @@ export default {
     const handleClear = () => {
       keyword.value = ''
       emit('update:modelValue', '')
+
+      // 清除防抖计时器
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+
       emit('clear')
     }
 

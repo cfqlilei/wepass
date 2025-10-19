@@ -18,3 +18,4 @@ src/build/bin/wepass.app/Contents/MacOS/data/My_pass 2.db
 src/build/bin/wepass.app/Contents/MacOS/data/my_pass.db
 build/**
 tests/test-results/**
+启动wepass.command

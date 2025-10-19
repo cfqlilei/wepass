@@ -31,7 +31,7 @@ func TestVaultService_CreateAndOpenVault(t *testing.T) {
 
 	// 测试创建密码库
 	password := "Test246!Asd"
-	err := vaultService.CreateVault(vaultPath, password)
+	err := vaultService.CreateVault(vaultPath, password, "zh-CN")
 	if err != nil {
 		t.Fatalf("创建密码库失败: %v", err)
 	}

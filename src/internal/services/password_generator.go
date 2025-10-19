@@ -316,6 +316,260 @@ func (prs *PasswordRuleService) validateGeneratedPassword(password string, confi
 }
 
 /**
+ * analyzeCharsetTypes 分析字符集中包含的字符类型
+ * @param charset 字符集
+ * @return map[string]string 包含各类型字符的集合
+ */
+func (prs *PasswordRuleService) analyzeCharsetTypes(charset string) map[string]string {
+	types := make(map[string]string)
+
+	uppercase := ""
+	lowercase := ""
+	digits := ""
+	special := ""
+
+	for _, char := range charset {
+		if char >= 'A' && char <= 'Z' {
+			uppercase += string(char)
+		} else if char >= 'a' && char <= 'z' {
+			lowercase += string(char)
+		} else if char >= '0' && char <= '9' {
+			digits += string(char)
+		} else {
+			special += string(char)
+		}
+	}
+
+	if uppercase != "" {
+		types["uppercase"] = uppercase
+	}
+	if lowercase != "" {
+		types["lowercase"] = lowercase
+	}
+	if digits != "" {
+		types["digits"] = digits
+	}
+	if special != "" {
+		types["special"] = special
+	}
+
+	return types
+}
+
+/**
+ * generateMixedCharsWithConstraints 根据约束生成混合字符
+ * @param charset 字符集
+ * @param count 需要生成的字符数量
+ * @return []rune 生成的字符列表
+ * @return error 错误信息
+ */
+func (prs *PasswordRuleService) generateMixedCharsWithConstraints(charset string, count int) ([]rune, error) {
+	if count <= 0 {
+		return []rune{}, fmt.Errorf("字符数量必须大于0")
+	}
+
+	types := prs.analyzeCharsetTypes(charset)
+	typeCount := len(types)
+	var result []rune
+
+	if typeCount == 1 {
+		// 只有一种类型，直接生成
+		for i := 0; i < count; i++ {
+			char, _ := prs.getRandomChar(charset)
+			result = append(result, char)
+		}
+	} else if typeCount == 2 {
+		// 2种组合，长度 >= 2 时做到二选一
+		if count >= 2 {
+			// 先各取一个，确保都有
+			typeSlice := make([]string, 0, 2)
+			for _, v := range types {
+				typeSlice = append(typeSlice, v)
+			}
+
+			char, _ := prs.getRandomChar(typeSlice[0])
+			result = append(result, char)
+			char, _ = prs.getRandomChar(typeSlice[1])
+			result = append(result, char)
+
+			// 剩余的字符随机从两个集合中选择
+			for i := 2; i < count; i++ {
+				randVal, _ := rand.Int(rand.Reader, big.NewInt(2))
+				if randVal.Int64() == 0 {
+					char, _ := prs.getRandomChar(typeSlice[0])
+					result = append(result, char)
+				} else {
+					char, _ := prs.getRandomChar(typeSlice[1])
+					result = append(result, char)
+				}
+			}
+		} else {
+			// 长度 = 1，随机选择一个类型
+			typeSlice := make([]string, 0, 2)
+			for _, v := range types {
+				typeSlice = append(typeSlice, v)
+			}
+			randVal, _ := rand.Int(rand.Reader, big.NewInt(2))
+			char, _ := prs.getRandomChar(typeSlice[randVal.Int64()])
+			result = append(result, char)
+		}
+	} else if typeCount >= 3 {
+		// 3种或以上组合
+		typeSlice := make([]string, 0, typeCount)
+		for _, v := range types {
+			typeSlice = append(typeSlice, v)
+		}
+
+		if count == 2 {
+			// 长度 = 2：二选一
+			randVal, _ := rand.Int(rand.Reader, big.NewInt(int64(typeCount)))
+			choice := randVal.Int64()
+			char, _ := prs.getRandomChar(typeSlice[choice])
+			result = append(result, char)
+
+			// 第二个字符从不同的类型中选择
+			for {
+				randVal, _ := rand.Int(rand.Reader, big.NewInt(int64(typeCount)))
+				if randVal.Int64() != choice {
+					char, _ := prs.getRandomChar(typeSlice[randVal.Int64()])
+					result = append(result, char)
+					break
+				}
+			}
+		} else if count == 3 {
+			// 长度 = 3：三选一（如果有3种或以上）
+			if typeCount >= 3 {
+				// 先各取一个，确保都有
+				char, _ := prs.getRandomChar(typeSlice[0])
+				result = append(result, char)
+				char, _ = prs.getRandomChar(typeSlice[1])
+				result = append(result, char)
+				char, _ = prs.getRandomChar(typeSlice[2])
+				result = append(result, char)
+			} else {
+				// 不足3种，随机生成
+				for i := 0; i < count; i++ {
+					randVal, _ := rand.Int(rand.Reader, big.NewInt(int64(typeCount)))
+					char, _ := prs.getRandomChar(typeSlice[randVal.Int64()])
+					result = append(result, char)
+				}
+			}
+		} else {
+			// 长度 > 3：随机从所有类型中选择
+			for i := 0; i < count; i++ {
+				randVal, _ := rand.Int(rand.Reader, big.NewInt(int64(typeCount)))
+				char, _ := prs.getRandomChar(typeSlice[randVal.Int64()])
+				result = append(result, char)
+			}
+		}
+	} else {
+		// 直接生成
+		for i := 0; i < count; i++ {
+			char, _ := prs.getRandomChar(charset)
+			result = append(result, char)
+		}
+	}
+
+	return result, nil
+}
+
+/**
+ * generateMixedAlphanumericChars 生成混合字母数字字符
+ * 根据长度要求生成包含大小写字母和数字的字符
+ * @param count 需要生成的字符数量
+ * @return []rune 生成的字符列表
+ * @return error 错误信息
+ */
+func (prs *PasswordRuleService) generateMixedAlphanumericChars(count int) ([]rune, error) {
+	if count <= 0 {
+		return []rune{}, fmt.Errorf("字符数量必须大于0")
+	}
+
+	var result []rune
+
+	// 定义字符集
+	uppercase := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	lowercase := "abcdefghijklmnopqrstuvwxyz"
+	digits := "0123456789"
+
+	if count >= 3 {
+		// 长度 >= 3：必须包含大写、小写、数字
+		// 先各取一个，确保都有
+		char, _ := prs.getRandomChar(uppercase)
+		result = append(result, char)
+		char, _ = prs.getRandomChar(lowercase)
+		result = append(result, char)
+		char, _ = prs.getRandomChar(digits)
+		result = append(result, char)
+
+		// 剩余的字符随机从三个集合中选择
+		// 提高数字的几率：数字占40%，大小写各占30%
+		for i := 3; i < count; i++ {
+			randVal, _ := rand.Int(rand.Reader, big.NewInt(100))
+			val := randVal.Int64()
+
+			if val < 40 {
+				// 40% 概率选择数字
+				char, _ := prs.getRandomChar(digits)
+				result = append(result, char)
+			} else if val < 70 {
+				// 30% 概率选择大写
+				char, _ := prs.getRandomChar(uppercase)
+				result = append(result, char)
+			} else {
+				// 30% 概率选择小写
+				char, _ := prs.getRandomChar(lowercase)
+				result = append(result, char)
+			}
+		}
+	} else if count == 2 {
+		// 长度 = 2：三选二（大写、小写、数字）
+		// 随机选择2种组合
+		randVal, _ := rand.Int(rand.Reader, big.NewInt(3))
+		choice := randVal.Int64()
+
+		switch choice {
+		case 0:
+			// 大写 + 小写
+			char, _ := prs.getRandomChar(uppercase)
+			result = append(result, char)
+			char, _ = prs.getRandomChar(lowercase)
+			result = append(result, char)
+		case 1:
+			// 大写 + 数字
+			char, _ := prs.getRandomChar(uppercase)
+			result = append(result, char)
+			char, _ = prs.getRandomChar(digits)
+			result = append(result, char)
+		case 2:
+			// 小写 + 数字
+			char, _ := prs.getRandomChar(lowercase)
+			result = append(result, char)
+			char, _ = prs.getRandomChar(digits)
+			result = append(result, char)
+		}
+	} else {
+		// 长度 = 1：二选一（大写、小写、数字）
+		randVal, _ := rand.Int(rand.Reader, big.NewInt(3))
+		choice := randVal.Int64()
+
+		switch choice {
+		case 0:
+			char, _ := prs.getRandomChar(uppercase)
+			result = append(result, char)
+		case 1:
+			char, _ := prs.getRandomChar(lowercase)
+			result = append(result, char)
+		case 2:
+			char, _ := prs.getRandomChar(digits)
+			result = append(result, char)
+		}
+	}
+
+	return result, nil
+}
+
+/**
  * parseCustomPattern 解析自定义规则模式
  * @param pattern 自定义规则模式
  * @return string 生成的密码
@@ -376,13 +630,13 @@ func (prs *PasswordRuleService) parseCustomPattern(pattern string) (string, erro
 					return "", fmt.Errorf("重复次数必须大于0")
 				}
 
-				// 生成指定次数的字符
-				for j := 0; j < count; j++ {
-					randomChar, err := prs.getRandomChar(customSet)
-					if err != nil {
-						return "", fmt.Errorf("从自定义字符集生成字符失败: %w", err)
-					}
-					result.WriteRune(randomChar)
+				// 使用约束生成函数生成混合字符
+				chars, err := prs.generateMixedCharsWithConstraints(customSet, count)
+				if err != nil {
+					return "", fmt.Errorf("生成混合字符失败: %w", err)
+				}
+				for _, c := range chars {
+					result.WriteRune(c)
 				}
 
 				i = nextPos + countEnd + 1
@@ -416,18 +670,29 @@ func (prs *PasswordRuleService) parseCustomPattern(pattern string) (string, erro
 				return "", fmt.Errorf("重复次数必须大于0")
 			}
 
-			// 生成指定次数的字符
-			charset, err := prs.getCharsetForIdentifier(char)
-			if err != nil {
-				return "", err
-			}
-
-			for j := 0; j < count; j++ {
-				randomChar, err := prs.getRandomChar(charset)
+			// 特殊处理 A 规则（混合字母数字）
+			if char == 'A' {
+				chars, err := prs.generateMixedAlphanumericChars(count)
 				if err != nil {
-					return "", fmt.Errorf("生成字符失败: %w", err)
+					return "", fmt.Errorf("生成混合字母数字字符失败: %w", err)
 				}
-				result.WriteRune(randomChar)
+				for _, c := range chars {
+					result.WriteRune(c)
+				}
+			} else {
+				// 其他规则的处理
+				charset, err := prs.getCharsetForIdentifier(char)
+				if err != nil {
+					return "", err
+				}
+
+				for j := 0; j < count; j++ {
+					randomChar, err := prs.getRandomChar(charset)
+					if err != nil {
+						return "", fmt.Errorf("生成字符失败: %w", err)
+					}
+					result.WriteRune(randomChar)
+				}
 			}
 
 			i += end + 2

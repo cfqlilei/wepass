@@ -68,7 +68,7 @@ const { t } = useI18n()
  */
 const handleRename = async () => {
   if (!props.tab) return
-  
+
   try {
     const { value: newName } = await ElMessageBox.prompt(
       t('tabContextMenu.promptNewName'),
@@ -90,14 +90,15 @@ const handleRename = async () => {
       }
     )
 
-    if (newName && newName.trim() !== props.tab.name) {
+    // 20251019 陈凤庆 修复问题 002-2：标签重命名时序问题，确保对比时都进行trim()处理
+    if (newName && newName.trim() !== props.tab.name.trim()) {
       emit('rename', props.tab.id, newName.trim())
     }
   } catch (error) {
     // 用户取消操作
     console.log(t('tabContextMenu.userCanceledRename'))
   }
-  
+
   emit('close')
 }
 

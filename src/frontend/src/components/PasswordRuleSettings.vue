@@ -308,22 +308,17 @@
           :rules="[{ required: true, message: '请输入规则名称', trigger: 'blur' }]"
           prop="name"
         >
-          <el-select
+          <!-- 20251019 陈凤庆 修复问题 003-3：改用el-autocomplete组件，支持更好的编辑体验 -->
+          <el-autocomplete
             v-model="saveForm.name"
             placeholder="请选择或输入规则名称"
-            filterable
-            allow-create
-            default-first-option
-            @change="checkRuleNameExists"
+            :fetch-suggestions="queryRuleNames"
+            @input="checkRuleNameExists"
+            @select="handleRuleNameSelect"
             style="width: 100%"
-          >
-            <el-option
-              v-for="rule in savedRules"
-              :key="rule.id"
-              :label="rule.name"
-              :value="rule.name"
-            />
-          </el-select>
+            clearable
+            :trigger-on-focus="false"
+          />
           <div v-if="nameExistsWarning" class="name-warning">
             <el-text type="warning" size="small">
               规则名称已存在，保存将覆盖现有规则
@@ -761,18 +756,53 @@ const showSaveRuleDialog = () => {
 
 /**
  * 检查规则名称是否存在
+ * @modify 20251019 陈凤庆 修复问题 003-3：改进名称检查逻辑
  */
 const checkRuleNameExists = () => {
-  if (!saveForm.name.trim()) {
+  if (!saveForm.name || !saveForm.name.trim()) {
     nameExistsWarning.value = false
     return
   }
 
   nameExistsWarning.value = savedRules.value.some(rule => rule.name === saveForm.name.trim())
+  console.log(`[checkRuleNameExists] 规则名称: ${saveForm.name.trim()}, 是否存在: ${nameExistsWarning.value}`)
+}
+
+/**
+ * 查询规则名称建议
+ * @param {string} queryString 查询字符串
+ * @param {Function} callback 回调函数
+ * @modify 20251019 陈凤庆 修复问题 003-3：新增自动完成功能
+ */
+const queryRuleNames = (queryString, callback) => {
+  const suggestions = savedRules.value
+    .filter(rule => {
+      if (!queryString) return true
+      return rule.name.toLowerCase().includes(queryString.toLowerCase())
+    })
+    .map(rule => ({
+      value: rule.name,
+      label: rule.name
+    }))
+
+  console.log(`[queryRuleNames] 查询: ${queryString}, 建议数量: ${suggestions.length}`)
+  callback(suggestions)
+}
+
+/**
+ * 处理规则名称选择
+ * @param {Object} item 选择的项目
+ * @modify 20251019 陈凤庆 修复问题 003-3：新增选择处理
+ */
+const handleRuleNameSelect = (item) => {
+  console.log(`[handleRuleNameSelect] 选择规则名称: ${item.value}`)
+  saveForm.name = item.value
+  checkRuleNameExists()
 }
 
 /**
  * 保存密码规则
+ * @modify 20251019 陈凤庆 修复问题 003-2：处理重复名称的情况，支持更新现有规则
  */
 const savePasswordRule = async () => {
   if (!saveForm.name.trim()) {
@@ -783,54 +813,109 @@ const savePasswordRule = async () => {
   saving.value = true
 
   try {
+    console.log(`[savePasswordRule] ========== 开始保存密码规则 ==========`)
+    console.log(`[savePasswordRule] 规则名称: ${saveForm.name.trim()}`)
+    console.log(`[savePasswordRule] 规则描述: ${saveForm.description.trim()}`)
+    console.log(`[savePasswordRule] 配置模式: ${configMode.value}`)
+    console.log(`[savePasswordRule] 是否设为默认: ${saveForm.isDefault}`)
+    console.log(`[savePasswordRule] 名称是否存在: ${nameExistsWarning.value}`)
+
     let result
 
-    if (configMode.value === 'general') {
-      // 转换数据结构并保存通用规则
-      const backendRule = convertGeneralRuleToBackend(generalRule)
-      console.log('保存通用规则数据:', backendRule)
-      result = await window.go.app.App.CreateGeneralPasswordRule(
-        saveForm.name.trim(),
-        saveForm.description.trim(),
-        backendRule
-      )
+    // 20251019 陈凤庆 修复问题 003-2：检查是否为更新现有规则
+    const existingRule = savedRules.value.find(rule => rule.name === saveForm.name.trim())
+
+    if (existingRule && nameExistsWarning.value) {
+      console.log(`[savePasswordRule] 更新现有规则: ${existingRule.id}`)
+
+      if (configMode.value === 'general') {
+        // 更新通用规则
+        const backendRule = convertGeneralRuleToBackend(generalRule)
+        console.log('[savePasswordRule] 更新通用规则数据:', backendRule)
+        result = await window.go.app.App.UpdateGeneralPasswordRule(
+          existingRule.id,
+          saveForm.name.trim(),
+          saveForm.description.trim(),
+          backendRule
+        )
+      } else {
+        // 更新自定义规则
+        const backendRule = convertCustomRuleToBackend(customRule)
+        console.log('[savePasswordRule] 更新自定义规则数据:', backendRule)
+        result = await window.go.app.App.UpdateCustomPasswordRule(
+          existingRule.id,
+          saveForm.name.trim(),
+          saveForm.description.trim(),
+          backendRule
+        )
+      }
+      console.log(`[savePasswordRule] ✅ 规则更新成功:`, result)
     } else {
-      // 转换数据结构并保存自定义规则
-      const backendRule = convertCustomRuleToBackend(customRule)
-      console.log('保存自定义规则数据:', backendRule)
-      result = await window.go.app.App.CreateCustomPasswordRule(
-        saveForm.name.trim(),
-        saveForm.description.trim(),
-        backendRule
-      )
+      console.log(`[savePasswordRule] 创建新规则`)
+
+      if (configMode.value === 'general') {
+        // 转换数据结构并保存通用规则
+        const backendRule = convertGeneralRuleToBackend(generalRule)
+        console.log('[savePasswordRule] 创建通用规则数据:', backendRule)
+        result = await window.go.app.App.CreateGeneralPasswordRule(
+          saveForm.name.trim(),
+          saveForm.description.trim(),
+          backendRule
+        )
+      } else {
+        // 转换数据结构并保存自定义规则
+        const backendRule = convertCustomRuleToBackend(customRule)
+        console.log('[savePasswordRule] 创建自定义规则数据:', backendRule)
+        result = await window.go.app.App.CreateCustomPasswordRule(
+          saveForm.name.trim(),
+          saveForm.description.trim(),
+          backendRule
+        )
+      }
+      console.log(`[savePasswordRule] ✅ 规则创建成功:`, result)
     }
 
     // 如果设置为默认规则，调用设置默认规则的API
     if (saveForm.isDefault && result.id) {
       try {
+        console.log(`[savePasswordRule] 设置为默认规则: ${result.id}`)
         await window.go.app.App.SetPasswordRuleAsDefault(result.id, true)
-        console.log('设置默认规则成功:', result.id)
+        console.log('[savePasswordRule] ✅ 设置默认规则成功')
       } catch (error) {
-        console.error('设置默认规则失败:', error)
+        console.error('[savePasswordRule] ❌ 设置默认规则失败:', error)
         ElMessage.warning('密码规则保存成功，但设置为默认规则失败')
       }
     }
 
-    ElMessage.success('密码规则保存成功')
+    ElMessage.success(existingRule ? '密码规则更新成功' : '密码规则保存成功')
     showSaveDialog.value = false
 
     // 重新加载规则列表
+    console.log(`[savePasswordRule] 重新加载规则列表...`)
     await loadPasswordRules()
 
     // 选择刚保存的规则并加载其配置
     selectedRuleId.value = result.id
     if (result.id) {
+      console.log(`[savePasswordRule] 加载规则配置: ${result.id}`)
       await handleRuleChange(result.id)
     }
 
+    console.log(`[savePasswordRule] ========== 密码规则保存完成 ==========`)
+
   } catch (error) {
-    console.error('保存密码规则失败:', error)
-    ElMessage.error('保存密码规则失败: ' + error.message)
+    console.error('[savePasswordRule] ❌ 保存密码规则失败:', error)
+    console.error('[savePasswordRule] 错误详情:', error.message, error.stack)
+
+    // 20251019 陈凤庆 修复问题 003-2：改进错误消息显示
+    let errorMessage = '保存密码规则失败'
+    if (error.message) {
+      errorMessage += ': ' + error.message
+    } else {
+      errorMessage += ': 未知错误'
+    }
+
+    ElMessage.error(errorMessage)
   } finally {
     saving.value = false
   }

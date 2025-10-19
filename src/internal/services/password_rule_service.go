@@ -53,13 +53,15 @@ func (prs *PasswordRuleService) CreateRule(name, description, ruleType string, c
 		return models.PasswordRule{}, fmt.Errorf("无效的规则类型: %s", ruleType)
 	}
 
-	// 检查规则名称是否已存在
+	// 20251019 陈凤庆 修复问题 003-2：检查规则名称是否已存在，提供更详细的错误信息
 	exists, err := prs.checkRuleNameExists(name)
 	if err != nil {
+		logger.Error("[密码规则服务] 检查规则名称失败: %v", err)
 		return models.PasswordRule{}, fmt.Errorf("检查规则名称失败: %w", err)
 	}
 	if exists {
-		return models.PasswordRule{}, fmt.Errorf("规则名称已存在: %s", name)
+		logger.Info("[密码规则服务] 规则名称已存在: %s", name)
+		return models.PasswordRule{}, fmt.Errorf("规则名称已存在: %s，请使用不同的名称或选择更新现有规则", name)
 	}
 
 	// 序列化配置

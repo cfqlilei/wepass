@@ -17,6 +17,10 @@ export const useAppStore = defineStore("app", () => {
   const isSearching = ref(false);
   const searchResults = ref([]);
 
+  // 20251019 陈凤庆 新增：分组页签记忆功能
+  // 存储每个分组最后选中的页签ID，格式：{ groupId: tabId }
+  const groupTabMemory = ref({});
+
   // 计算属性
   const currentGroup = computed(() => {
     return groups.value.find((g) => g.id === currentGroupId.value);
@@ -93,6 +97,11 @@ export const useAppStore = defineStore("app", () => {
    */
   const setCurrentTab = (tabId) => {
     currentTabId.value = tabId;
+
+    // 20251019 陈凤庆 记录当前分组的页签选择
+    if (currentGroupId.value && tabId) {
+      rememberGroupTab(currentGroupId.value, tabId);
+    }
   };
 
   /**
@@ -160,6 +169,85 @@ export const useAppStore = defineStore("app", () => {
     searchResults.value = [];
   };
 
+  /**
+   * 记录分组的页签选择
+   * @param {string} groupId 分组ID
+   * @param {string} tabId 页签ID
+   * @author 20251019 陈凤庆 新增分组页签记忆功能
+   */
+  const rememberGroupTab = (groupId, tabId) => {
+    if (!groupId || !tabId) return;
+
+    groupTabMemory.value[groupId] = tabId;
+
+    // 持久化到localStorage
+    try {
+      localStorage.setItem(
+        "groupTabMemory",
+        JSON.stringify(groupTabMemory.value)
+      );
+      console.log(`[Store] 记录分组${groupId}的页签选择: ${tabId}`);
+    } catch (error) {
+      console.error("[Store] 保存页签记忆失败:", error);
+    }
+  };
+
+  /**
+   * 获取分组记忆的页签ID
+   * @param {string} groupId 分组ID
+   * @returns {string|null} 页签ID或null
+   * @author 20251019 陈凤庆 新增分组页签记忆功能
+   */
+  const getRememberedTab = (groupId) => {
+    if (!groupId) return null;
+
+    const rememberedTabId = groupTabMemory.value[groupId];
+    console.log(`[Store] 获取分组${groupId}的记忆页签: ${rememberedTabId}`);
+    return rememberedTabId || null;
+  };
+
+  /**
+   * 从localStorage加载页签记忆
+   * @author 20251019 陈凤庆 新增分组页签记忆功能
+   */
+  const loadGroupTabMemory = () => {
+    try {
+      const saved = localStorage.getItem("groupTabMemory");
+      if (saved) {
+        groupTabMemory.value = JSON.parse(saved);
+        console.log("[Store] 已加载页签记忆:", groupTabMemory.value);
+      }
+    } catch (error) {
+      console.error("[Store] 加载页签记忆失败:", error);
+      groupTabMemory.value = {};
+    }
+  };
+
+  /**
+   * 清除分组的页签记忆
+   * @param {string} groupId 分组ID（可选，不传则清除所有）
+   * @author 20251019 陈凤庆 新增分组页签记忆功能
+   */
+  const clearGroupTabMemory = (groupId = null) => {
+    if (groupId) {
+      delete groupTabMemory.value[groupId];
+      console.log(`[Store] 已清除分组${groupId}的页签记忆`);
+    } else {
+      groupTabMemory.value = {};
+      console.log("[Store] 已清除所有页签记忆");
+    }
+
+    // 更新localStorage
+    try {
+      localStorage.setItem(
+        "groupTabMemory",
+        JSON.stringify(groupTabMemory.value)
+      );
+    } catch (error) {
+      console.error("[Store] 保存页签记忆失败:", error);
+    }
+  };
+
   return {
     // 状态
     groups,
@@ -170,6 +258,7 @@ export const useAppStore = defineStore("app", () => {
     searchKeyword,
     isSearching,
     searchResults,
+    groupTabMemory,
 
     // 计算属性
     currentGroup,
@@ -188,5 +277,11 @@ export const useAppStore = defineStore("app", () => {
     setSearchKeyword,
     setSearchResults,
     clearSearch,
+
+    // 20251019 陈凤庆 新增：页签记忆功能
+    rememberGroupTab,
+    getRememberedTab,
+    loadGroupTabMemory,
+    clearGroupTabMemory,
   };
 });

@@ -188,6 +188,9 @@ export default {
     const isNewAccount = ref(false)
     const searchResults = ref({ groups: [], accounts: [] })
 
+    // 搜索请求控制器 - 用于取消过期的搜索请求
+    let searchAbortController = null
+
     // 右键菜单相关状态
     const showContextMenu = ref(false)
     const contextMenuPosition = reactive({ x: 0, y: 0 })
@@ -240,6 +243,10 @@ export default {
         appTitle.value = `${t('main.title')} v${appInfo.version}`
         console.log('[onMounted] 📝 标题已设置:', appTitle.value)
 
+        // 20251019 陈凤庆 加载页签记忆
+        console.log('[onMounted] 加载页签记忆...')
+        appStore.loadGroupTabMemory()
+
         // 20250127 陈凤庆 存储当前聚焦的应用程序作为目标应用程序
         // 这样当用户从其他应用程序切换到密码管理器时，我们就知道目标应用程序是什么
         console.log('[onMounted] 存储目标应用程序...')
@@ -258,18 +265,13 @@ export default {
         await refreshUsageDays() // 刷新使用天数
 
         // 20250101 陈凤庆 如果有分组，默认选中第一个分组
+        // 20251019 陈凤庆 使用selectGroup函数，支持页签记忆功能
         if (groupsData && groupsData.length > 0) {
           const firstGroupId = groupsData[0].id
           console.log(`[onMounted] 默认选中第一个分组: ${groupsData[0].name} (ID: ${firstGroupId})`)
-          appStore.setCurrentGroup(firstGroupId)
 
-          // 20251001 陈凤庆 加载第一个分组的页签，并自动选中第一个标签
-          console.log(`[onMounted] 加载分组${firstGroupId}的页签...`)
-          await loadTabsByGroup(firstGroupId, true)
-
-          // 加载第一个分组的账号
-          console.log(`[onMounted] 加载分组${firstGroupId}的账号...`)
-          await loadPasswordsByGroup(firstGroupId)
+          // 使用selectGroup函数，自动处理页签记忆和选择
+          await selectGroup(firstGroupId)
         } else {
           console.warn('[onMounted] 没有分组数据')
           ElMessage.warning(t('warning.noGroupData'))
@@ -492,33 +494,70 @@ export default {
      * @modify 20250101 陈凤庆 切换分组时，先加载标签，再加载账号
      * @modify 20251001 陈凤庆 切换分组时不自动选中标签，只显示标签列表
      * @modify 20251003 陈凤庆 支持搜索结果分组
+     * @modify 20251019 陈凤庆 修复问题 003-1：增加详细调试日志，跟踪分组切换过程
+     * @modify 20251019 陈凤庆 新增分组页签记忆功能：自动选择记忆的页签或第一个页签
      */
     const selectGroup = async (groupId) => {
-      console.log(`切换到分组: ${groupId}`)
+      console.log(`[selectGroup] ========== 开始切换分组 ==========`)
+      console.log(`[selectGroup] 目标分组ID: ${groupId} (类型: ${typeof groupId})`)
+      console.log(`[selectGroup] 切换前分组ID: ${currentGroupId.value}`)
+      console.log(`[selectGroup] 切换前标签ID: ${currentTabId.value}`)
 
       // 设置当前分组
       appStore.setCurrentGroup(groupId)
+      console.log(`[selectGroup] ✅ 已设置当前分组: ${appStore.currentGroupId}`)
 
       // 如果是搜索结果分组，直接显示搜索结果
       if (groupId === 'search-result') {
-        console.log('[搜索] 切换到搜索结果分组')
+        console.log('[selectGroup] 切换到搜索结果分组')
         // 清空标签列表
         appStore.setTabs([])
         appStore.setCurrentTab(null)
+        console.log('[selectGroup] 已清空标签列表和当前标签')
         // 显示搜索结果
         if (searchResults.value.passwords) {
           appStore.setPasswords(searchResults.value.passwords)
+          console.log(`[selectGroup] 已显示${searchResults.value.passwords.length}个搜索结果`)
         }
+        console.log(`[selectGroup] ========== 搜索结果分组切换完成 ==========`)
         return
       }
 
-      // 20251001 陈凤庆 加载该分组的页签，但不自动选中第一个标签
+      console.log(`[selectGroup] 开始加载分组${groupId}的标签...`)
+      // 20251019 陈凤庆 加载该分组的页签，并根据记忆选择页签
       await loadTabsByGroup(groupId, false)
+      console.log(`[selectGroup] 标签加载完成，当前标签数量: ${appStore.tabs.length}`)
 
-      // 加载该分组的账号
-      await loadPasswordsByGroup(groupId)
+      // 20251019 陈凤庆 新增：分组页签记忆功能
+      if (appStore.tabs.length > 0) {
+        // 尝试获取记忆的页签
+        const rememberedTabId = appStore.getRememberedTab(groupId)
+        console.log(`[selectGroup] 分组${groupId}的记忆页签: ${rememberedTabId}`)
 
-      console.log(`分组${groupId}切换完成`)
+        // 检查记忆的页签是否存在于当前标签列表中
+        const rememberedTab = rememberedTabId ? appStore.tabs.find(tab => tab.id === rememberedTabId) : null
+
+        if (rememberedTab) {
+          console.log(`[selectGroup] 找到记忆页签: ${rememberedTab.name} (ID: ${rememberedTab.id})`)
+          await selectTab(rememberedTab.id)
+        } else {
+          // 如果没有记忆页签或记忆页签不存在，选择第一个页签
+          const firstTab = appStore.tabs[0]
+          console.log(`[selectGroup] 选择第一个页签: ${firstTab.name} (ID: ${firstTab.id})`)
+          await selectTab(firstTab.id)
+        }
+      } else {
+        console.log(`[selectGroup] 分组${groupId}没有页签，加载分组所有账号`)
+        // 如果没有页签，加载该分组的所有账号
+        await loadPasswordsByGroup(groupId)
+      }
+
+      console.log(`[selectGroup] ========== 分组${groupId}切换完成 ==========`)
+      console.log(`[selectGroup] 最终状态检查:`)
+      console.log(`  - 当前分组ID: ${currentGroupId.value}`)
+      console.log(`  - 当前标签ID: ${currentTabId.value}`)
+      console.log(`  - 标签数量: ${appStore.tabs.length}`)
+      console.log(`  - 账号数量: ${appStore.passwords.length}`)
     }
     
     /**
@@ -526,30 +565,46 @@ export default {
      * @param {number} tabId 页签ID
      * @modify 20250101 陈凤庆 添加日志记录，标签切换时会自动触发账号筛选
      * @modify 20251002 陈凤庆 点击标签时调用后端API查询对应的账号列表
+     * @modify 20251019 陈凤庆 修复问题 003-1：增加详细调试日志，跟踪标签切换过程
      */
     const selectTab = async (tabId) => {
-      console.log(`切换到标签: ${tabId}`)
+      console.log(`[selectTab] ========== 开始切换标签 ==========`)
+      console.log(`[selectTab] 目标标签ID: ${tabId} (类型: ${typeof tabId})`)
+      console.log(`[selectTab] 切换前标签ID: ${currentTabId.value}`)
+      console.log(`[selectTab] 当前分组ID: ${currentGroupId.value}`)
+
       appStore.setCurrentTab(tabId)
+      console.log(`[selectTab] ✅ 已设置当前标签: ${appStore.currentTabId}`)
 
       // 20251002 陈凤庆 点击标签时，调用后端API查询该标签下的账号列表
       const tab = appStore.tabs.find(t => t.id === tabId)
       if (tab) {
-        console.log(`当前标签: ${tab.name}, 标签ID: ${tab.id}`)
+        console.log(`[selectTab] 找到标签对象: ${tab.name} (ID: ${tab.id})`)
 
         try {
           // 调用后端API获取该标签下的账号列表
           console.log(`[selectTab] 开始加载标签${tabId}的账号列表...`)
           const accounts = await apiService.getAccountsByTab(tabId)
-          console.log(`[selectTab] 获取到${accounts.length}个账号`)
+          console.log(`[selectTab] ✅ 获取到${accounts.length}个账号`)
 
           // 更新Store中的账号列表
           appStore.setPasswords(accounts)
+          console.log(`[selectTab] ✅ 已更新Store中的账号列表`)
 
         } catch (error) {
-          console.error('[selectTab] 加载标签账号列表失败:', error)
+          console.error('[selectTab] ❌ 加载标签账号列表失败:', error)
           ElMessage.error(`加载账号列表失败: ${error.message || '未知错误'}`)
         }
+      } else {
+        console.error(`[selectTab] ❌ 未找到标签ID为${tabId}的标签对象`)
+        console.error(`[selectTab] 可用标签列表:`, appStore.tabs.map(t => ({id: t.id, name: t.name})))
       }
+
+      console.log(`[selectTab] ========== 标签${tabId}切换完成 ==========`)
+      console.log(`[selectTab] 最终状态检查:`)
+      console.log(`  - 当前分组ID: ${currentGroupId.value}`)
+      console.log(`  - 当前标签ID: ${currentTabId.value}`)
+      console.log(`  - 账号数量: ${appStore.passwords.length}`)
     }
     
     /**
@@ -606,6 +661,7 @@ export default {
 
     /**
      * 处理搜索
+     * @modify 20251018 陈凤庆 添加 AbortController 取消过期的搜索请求，解决快速输入时的时序问题
      */
     const handleSearch = async () => {
       if (searchKeyword.value.trim() === '') {
@@ -614,16 +670,40 @@ export default {
       }
 
       try {
-        console.log('[搜索] 开始搜索:', searchKeyword.value)
+        // 取消之前的搜索请求
+        if (searchAbortController) {
+          console.log('[搜索] 取消之前的搜索请求')
+          searchAbortController.abort()
+        }
+
+        // 创建新的 AbortController
+        searchAbortController = new AbortController()
+        const currentKeyword = searchKeyword.value
+
+        console.log('[搜索] 开始搜索:', currentKeyword)
 
         // 搜索账号
-        const passwords = await apiService.searchPasswords(searchKeyword.value)
+        const passwords = await apiService.searchPasswords(currentKeyword)
+
+        // 检查是否被取消
+        if (searchAbortController.signal.aborted) {
+          console.log('[搜索] 搜索请求已被取消，放弃处理结果')
+          return
+        }
+
         console.log('[搜索] 搜索到账号:', passwords.length)
 
         // 搜索分组
         const groups = await apiService.getGroups()
+
+        // 再次检查是否被取消
+        if (searchAbortController.signal.aborted) {
+          console.log('[搜索] 搜索请求已被取消，放弃处理结果')
+          return
+        }
+
         const filteredGroups = groups.filter(g =>
-          g.name.toLowerCase().includes(searchKeyword.value.toLowerCase())
+          g.name.toLowerCase().includes(currentKeyword.toLowerCase())
         )
         console.log('[搜索] 搜索到分组:', filteredGroups.length)
 
@@ -649,11 +729,16 @@ export default {
           passwords: passwords
         }
 
-        appStore.setSearchKeyword(searchKeyword.value)
+        appStore.setSearchKeyword(currentKeyword)
         appStore.setSearchResults(passwords)
 
         console.log('[搜索] 搜索完成，切换到搜索结果分组')
       } catch (error) {
+        // 如果是 AbortError，说明请求被取消，不需要显示错误
+        if (error.name === 'AbortError') {
+          console.log('[搜索] 搜索请求已被取消')
+          return
+        }
         console.error('搜索失败:', error)
         ElMessage.error('搜索失败')
       }
@@ -1350,10 +1435,44 @@ export default {
      * @author 陈凤庆
      * @date 20250101
      * @modify 20251002 陈凤庆 账号改为账号项，保持命名一致性
+     * @modify 20251019 陈凤庆 修复问题 002-1：切换标签后创建账号失败，确保在没有选中标签时提示用户先选择标签
+     * @modify 20251019 陈凤庆 修复问题 003-1：增加详细调试日志，跟踪切换分组后的状态
      * @description 创建新账号项，传递当前分组ID和标签ID到编辑窗口
      */
     const createAccount = () => {
-      console.log(`[createAccount] 创建账号项，分组ID: ${currentGroupId.value}, 标签ID: ${currentTabId.value}`)
+      console.log(`[createAccount] ========== 开始创建账号项 ==========`)
+      console.log(`[createAccount] 当前分组ID: ${currentGroupId.value} (类型: ${typeof currentGroupId.value})`)
+      console.log(`[createAccount] 当前标签ID: ${currentTabId.value} (类型: ${typeof currentTabId.value})`)
+      console.log(`[createAccount] Store中的分组ID: ${appStore.currentGroupId} (类型: ${typeof appStore.currentGroupId})`)
+      console.log(`[createAccount] Store中的标签ID: ${appStore.currentTabId} (类型: ${typeof appStore.currentTabId})`)
+      console.log(`[createAccount] 当前分组对象:`, appStore.currentGroup)
+      console.log(`[createAccount] 当前标签对象:`, appStore.currentTab)
+      console.log(`[createAccount] 标签列表:`, appStore.tabs)
+
+      // 20251019 陈凤庆 修复问题 002-1：检查是否选中了标签，如果没有选中标签则提示用户
+      if (!currentTabId.value) {
+        console.warn(`[createAccount] ⚠️ 未选中标签，无法创建账号`)
+        ElMessage.warning(t('warning.selectTabFirst') || '请先选择一个标签')
+        return
+      }
+
+      // 20251019 陈凤庆 修复问题 003-1：验证分组和标签的有效性
+      if (!currentGroupId.value) {
+        console.error(`[createAccount] ❌ 未选中分组，无法创建账号`)
+        ElMessage.error('请先选择一个分组')
+        return
+      }
+
+      // 验证标签是否存在于当前标签列表中
+      const currentTabExists = appStore.tabs.find(tab => tab.id === currentTabId.value)
+      if (!currentTabExists) {
+        console.error(`[createAccount] ❌ 当前标签ID ${currentTabId.value} 不存在于标签列表中`)
+        console.error(`[createAccount] 可用标签列表:`, appStore.tabs.map(t => ({id: t.id, name: t.name})))
+        ElMessage.error('当前标签无效，请重新选择标签')
+        return
+      }
+
+      console.log(`[createAccount] ✅ 验证通过，开始创建账号数据结构`)
 
       // 20251002 陈凤庆 确保所有ID字段都是字符串类型，新建时id为空字符串，使用typeid字段
       selectedAccount.value = {
@@ -1370,6 +1489,10 @@ export default {
         is_favorite: false,
         input_method: 1 // 20251003 陈凤庆 添加输入方式字段，默认为1（默认方式）
       }
+
+      console.log(`[createAccount] 创建的账号数据结构:`, selectedAccount.value)
+      console.log(`[createAccount] ========== 账号项创建完成，打开编辑窗口 ==========`)
+
       isNewAccount.value = true
       showAccountDetail.value = true
     }
@@ -1578,9 +1701,16 @@ export default {
      * @param {Object} accountData 账号项数据
      * @modify 20251002 陈凤庆 账号改为账号项，保持命名一致性
      * @modify 20251002 陈凤庆 实现更新账号功能，保存后刷新列表并定位到当前账号
+     * @modify 20251019 陈凤庆 修复问题 003-1：增加详细调试日志，跟踪保存过程中的数据状态
      */
     const handleSaveAccount = async (accountData) => {
       try {
+        console.log(`[handleSaveAccount] ========== 开始保存账号 ==========`)
+        console.log(`[handleSaveAccount] 原始账号数据:`, accountData)
+        console.log(`[handleSaveAccount] 是否为新建账号: ${isNewAccount.value}`)
+        console.log(`[handleSaveAccount] 当前分组ID: ${currentGroupId.value}`)
+        console.log(`[handleSaveAccount] 当前标签ID: ${currentTabId.value}`)
+
         // 20251001 陈凤庆 确保所有ID字段都是字符串类型
         const cleanedData = {
           ...accountData,
@@ -1589,22 +1719,55 @@ export default {
           typeid: accountData.typeid ? String(accountData.typeid) : '' // 20251002 陈凤庆 改为typeid字段
         }
 
-        console.log('[handleSaveAccount] 开始保存账号，数据:', cleanedData)
-        console.log('[handleSaveAccount] 是否为新建:', isNewAccount.value)
+        console.log('[handleSaveAccount] 清理后的账号数据:', cleanedData)
+
+        // 20251019 陈凤庆 修复问题 003-1：验证关键字段
+        if (!cleanedData.typeid) {
+          console.error('[handleSaveAccount] ❌ typeid字段为空，这会导致保存失败')
+          console.error('[handleSaveAccount] 当前数据状态检查:')
+          console.error('  - cleanedData.typeid:', cleanedData.typeid)
+          console.error('  - accountData.typeid:', accountData.typeid)
+          console.error('  - currentTabId.value:', currentTabId.value)
+          console.error('  - appStore.currentTabId:', appStore.currentTabId)
+          ElMessage.error('标签信息丢失，请重新选择标签后再保存')
+          return
+        }
+
+        if (!cleanedData.group_id) {
+          console.error('[handleSaveAccount] ❌ group_id字段为空，这会导致保存失败')
+          console.error('[handleSaveAccount] 当前数据状态检查:')
+          console.error('  - cleanedData.group_id:', cleanedData.group_id)
+          console.error('  - accountData.group_id:', accountData.group_id)
+          console.error('  - currentGroupId.value:', currentGroupId.value)
+          console.error('  - appStore.currentGroupId:', appStore.currentGroupId)
+          ElMessage.error('分组信息丢失，请重新选择分组后再保存')
+          return
+        }
+
+        console.log('[handleSaveAccount] ✅ 关键字段验证通过，开始调用API')
 
         let savedAccountId = cleanedData.id
 
         if (isNewAccount.value) {
           console.log('[handleSaveAccount] 创建新账号...')
+          console.log('[handleSaveAccount] 调用API参数详情:')
+          console.log('  - title:', cleanedData.title)
+          console.log('  - username:', cleanedData.username)
+          console.log('  - password:', cleanedData.password ? '***已设置***' : '未设置')
+          console.log('  - url:', cleanedData.url)
+          console.log('  - typeid:', cleanedData.typeid)
+          console.log('  - notes:', cleanedData.notes)
+          console.log('  - input_method:', cleanedData.input_method)
+
           const newAccount = await apiService.createAccount(cleanedData)
-          console.log('[handleSaveAccount] 新账号创建成功:', newAccount)
+          console.log('[handleSaveAccount] ✅ 新账号创建成功:', newAccount)
           appStore.addPassword(newAccount)
           savedAccountId = newAccount.id
         } else {
           console.log('[handleSaveAccount] 更新现有账号...')
           // 20251002 陈凤庆 调用更新账号API
           await apiService.updatePasswordItem(cleanedData)
-          console.log('[handleSaveAccount] 账号更新成功')
+          console.log('[handleSaveAccount] ✅ 账号更新成功')
           appStore.updatePassword(cleanedData)
         }
 

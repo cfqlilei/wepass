@@ -1,6 +1,6 @@
 {
   "name": "wepass-frontend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "wepass 密码管理工具前端",
   "author": "陈凤庆",
   "private": true,

@@ -133,7 +133,7 @@ func TestApp_VaultOperations(t *testing.T) {
 	// 测试创建密码库
 	// 20251001 陈凤庆 CreateVault现在返回两个值
 	password := "Test246!Asd"
-	_, err := app.CreateVault(vaultPath, password)
+	_, err := app.CreateVault(vaultPath, password, "zh-CN")
 	if err != nil {
 		t.Fatalf("创建密码库失败: %v", err)
 	}
