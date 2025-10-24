@@ -296,23 +296,45 @@ func (as *AccountService) GetAllAccounts() ([]models.AccountDecrypted, error) {
  * @modify 20251005 陈凤庆 支持第5种输入方式（键盘助手输入）
  */
 func (as *AccountService) CreateAccount(title, username, password, url, typeID, notes string, inputMethod int) (models.AccountDecrypted, error) {
+	// 20251019 陈凤庆 修复问题 004：增加详细的参数验证和调试日志
+	logger.Info("[账号服务] 🔍 CreateAccount 详细参数检查:")
+	logger.Info("  - title: \"%s\" (长度: %d, 是否为空: %t)", title, len(title), title == "")
+	logger.Info("  - username: \"%s\" (长度: %d, 是否为空: %t)", username, len(username), username == "")
+	logger.Info("  - password: %s (长度: %d, 是否为空: %t)", func() string {
+		if password != "" {
+			return "***已设置***"
+		}
+		return "未设置"
+	}(), len(password), password == "")
+	logger.Info("  - url: \"%s\" (长度: %d, 是否为空: %t)", url, len(url), url == "")
+	logger.Info("  - typeID: \"%s\" (长度: %d, 是否为空: %t)", typeID, len(typeID), typeID == "")
+	logger.Info("  - notes: \"%s\" (长度: %d, 是否为空: %t)", notes, len(notes), notes == "")
+	logger.Info("  - inputMethod: %d", inputMethod)
+
 	if !as.dbManager.IsOpened() {
+		logger.Error("[账号服务] ❌ 数据库未打开")
 		return models.AccountDecrypted{}, fmt.Errorf("数据库未打开")
 	}
 
 	if as.cryptoManager == nil {
+		logger.Error("[账号服务] ❌ 加密管理器未设置")
 		return models.AccountDecrypted{}, fmt.Errorf("加密管理器未设置")
 	}
 
 	if title == "" {
+		logger.Error("[账号服务] ❌ 标题不能为空")
 		return models.AccountDecrypted{}, fmt.Errorf("标题不能为空")
 	}
 
-	// 验证类型ID
+	// 20251019 陈凤庆 增强类型ID验证，增加详细日志
+	logger.Info("[账号服务] 🔍 开始验证类型ID: %s", typeID)
 	err := as.validateTypeID(typeID)
 	if err != nil {
+		logger.Error("[账号服务] ❌ 类型ID验证失败: %v", err)
+		logger.Error("[账号服务] 失败的类型ID: \"%s\" (长度: %d)", typeID, len(typeID))
 		return models.AccountDecrypted{}, err
 	}
+	logger.Info("[账号服务] ✅ 类型ID验证通过")
 
 	db := as.dbManager.GetDB()
 	now := time.Now()
@@ -875,26 +897,57 @@ func (as *AccountService) maskNotes(notes string) string {
  * @modify 20251002 陈凤庆 替换validateGroupAndTab方法，只验证类型ID
  */
 func (as *AccountService) validateTypeID(typeID string) error {
+	// 20251019 陈凤庆 修复问题 004：增加详细的类型ID验证日志
+	logger.Info("[账号服务] 🔍 validateTypeID 开始验证:")
+	logger.Info("  - typeID: \"%s\" (长度: %d)", typeID, len(typeID))
+	logger.Info("  - 数据库状态: %t", as.dbManager.IsOpened())
+
 	if !as.dbManager.IsOpened() {
+		logger.Error("[账号服务] ❌ 数据库未打开")
 		return fmt.Errorf("数据库未打开")
 	}
 
 	if typeID == "" {
+		logger.Error("[账号服务] ❌ 类型ID不能为空")
 		return fmt.Errorf("类型ID不能为空")
 	}
 
 	db := as.dbManager.GetDB()
+	logger.Info("[账号服务] 🔍 开始查询数据库中的类型ID")
 
 	// 验证类型是否存在
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM types WHERE id = ?", typeID).Scan(&count)
 	if err != nil {
+		logger.Error("[账号服务] ❌ 查询类型失败: %v", err)
+		logger.Error("[账号服务] SQL查询参数: typeID=\"%s\"", typeID)
 		return fmt.Errorf("查询类型失败: %w", err)
 	}
+
+	logger.Info("[账号服务] 🔍 查询结果: count=%d", count)
+
 	if count == 0 {
+		logger.Error("[账号服务] ❌ 类型ID不存在: %s", typeID)
+
+		// 20251019 陈凤庆 新增：查询所有可用的类型ID，帮助调试
+		logger.Info("[账号服务] 🔍 查询所有可用的类型ID以供参考:")
+		rows, queryErr := db.Query("SELECT id, name, group_id FROM types ORDER BY group_id, name")
+		if queryErr == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id, name, groupID string
+				if scanErr := rows.Scan(&id, &name, &groupID); scanErr == nil {
+					logger.Info("  - 可用类型: ID=\"%s\", Name=\"%s\", GroupID=\"%s\"", id, name, groupID)
+				}
+			}
+		} else {
+			logger.Error("[账号服务] 查询可用类型ID失败: %v", queryErr)
+		}
+
 		return fmt.Errorf("类型ID不存在: %s", typeID)
 	}
 
+	logger.Info("[账号服务] ✅ 类型ID验证通过: %s", typeID)
 	return nil
 }
 

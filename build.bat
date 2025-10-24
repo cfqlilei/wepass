@@ -8,7 +8,7 @@ REM @modify 陈凤庆 整合多个构建脚本为统一脚本，支持更多平�
 setlocal enabledelayedexpansion
 
 REM 版本信息
-set "VERSION=1.0.7"
+set "VERSION=1.0.8"
 set "APP_NAME=wepass"
 for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
 set "BUILD_DATE=%dt:~0,8%"

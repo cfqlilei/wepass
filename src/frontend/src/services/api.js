@@ -540,28 +540,84 @@ class ApiService {
       return null;
     }
 
-    // 20251002 陈凤庆 调用CreateAccount接口，传递单独的参数
-    // 20251003 陈凤庆 添加inputMethod参数
-    // CreateAccount(title, username, password, url, typeID, notes, inputMethod)
-    console.log("[API] 创建账号参数:", {
+    // 20251019 陈凤庆 修复问题 004：增强API调用的调试日志
+    console.log("[API] ========== 创建账号API调用 ==========");
+    console.log("[API] 📥 原始传入参数:", item);
+
+    // 准备API调用参数
+    const apiParams = {
       title: item.title || "",
       username: item.username || "",
-      password: item.password ? "***" : "",
+      password: item.password || "",
       url: item.url || "",
       typeID: item.type || item.typeid || "",
       notes: item.notes || "",
       inputMethod: item.input_method || 1,
-    });
+    };
 
-    return await wailsAPI.CreateAccount(
-      item.title || "",
-      item.username || "",
-      item.password || "",
-      item.url || "",
-      item.type || item.typeid || "", // 兼容type和typeid字段
-      item.notes || "",
-      item.input_method || 1 // 默认使用Unicode方式
+    console.log("[API] 📤 准备调用后端API，参数详情:");
+    console.log(
+      "  - title:",
+      `"${apiParams.title}" (长度: ${apiParams.title.length})`
     );
+    console.log(
+      "  - username:",
+      `"${apiParams.username}" (长度: ${apiParams.username.length})`
+    );
+    console.log(
+      "  - password:",
+      apiParams.password ? "***已设置***" : "未设置",
+      `(长度: ${apiParams.password.length})`
+    );
+    console.log(
+      "  - url:",
+      `"${apiParams.url}" (长度: ${apiParams.url.length})`
+    );
+    console.log(
+      "  - typeID:",
+      `"${apiParams.typeID}" (长度: ${apiParams.typeID.length})`
+    );
+    console.log(
+      "  - notes:",
+      `"${apiParams.notes}" (长度: ${apiParams.notes.length})`
+    );
+    console.log("  - inputMethod:", apiParams.inputMethod);
+
+    // 20251019 陈凤庆 新增：关键字段验证
+    if (!apiParams.typeID) {
+      console.error("[API] ❌ 关键字段typeID为空，这会导致后端验证失败");
+      console.error("[API] 字段来源分析:");
+      console.error("  - item.type:", item.type);
+      console.error("  - item.typeid:", item.typeid);
+      throw new Error("typeID字段为空，无法创建账号");
+    }
+
+    if (!apiParams.title) {
+      console.error("[API] ❌ 关键字段title为空，这会导致后端验证失败");
+      throw new Error("title字段为空，无法创建账号");
+    }
+
+    try {
+      console.log("[API] 🚀 开始调用后端CreateAccount接口...");
+      const result = await wailsAPI.CreateAccount(
+        apiParams.title,
+        apiParams.username,
+        apiParams.password,
+        apiParams.url,
+        apiParams.typeID,
+        apiParams.notes,
+        apiParams.inputMethod
+      );
+
+      console.log("[API] ✅ 后端API调用成功，返回结果:", result);
+      console.log("[API] ========== 创建账号API调用完成 ==========");
+      return result;
+    } catch (error) {
+      console.error("[API] ❌ 后端API调用失败:", error);
+      console.error("[API] 失败时的参数:", apiParams);
+      console.error("[API] ========== 创建账号API调用失败 ==========");
+      throw error;
+    }
   }
 
   /**

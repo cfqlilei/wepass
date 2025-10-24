@@ -1123,6 +1123,21 @@ func (a *App) GetAccountsByConditions(conditions string) ([]models.AccountDecryp
 func (a *App) CreateAccount(title, username, password, url, typeID, notes string, inputMethod int) (models.AccountDecrypted, error) {
 	logger.LogAPICall("CreateAccount", fmt.Sprintf("title=%s, typeID=%s, inputMethod=%d", title, typeID, inputMethod), "开始处理")
 
+	// 20251019 陈凤庆 修复问题 004：增加详细的参数验证和调试日志
+	logger.Info("[CreateAccount] 🔍 详细参数检查:")
+	logger.Info("  - title: \"%s\" (长度: %d)", title, len(title))
+	logger.Info("  - username: \"%s\" (长度: %d)", username, len(username))
+	logger.Info("  - password: %s (长度: %d)", func() string {
+		if password != "" {
+			return "***已设置***"
+		}
+		return "未设置"
+	}(), len(password))
+	logger.Info("  - url: \"%s\" (长度: %d)", url, len(url))
+	logger.Info("  - typeID: \"%s\" (长度: %d)", typeID, len(typeID))
+	logger.Info("  - notes: \"%s\" (长度: %d)", notes, len(notes))
+	logger.Info("  - inputMethod: %d", inputMethod)
+
 	result, err := a.accountService.CreateAccount(title, username, password, url, typeID, notes, inputMethod)
 	if err != nil {
 		logger.Error("[API] CreateAccount失败，标题: %s, 错误: %v", title, err)

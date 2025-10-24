@@ -1437,10 +1437,12 @@ export default {
      * @modify 20251002 陈凤庆 账号改为账号项，保持命名一致性
      * @modify 20251019 陈凤庆 修复问题 002-1：切换标签后创建账号失败，确保在没有选中标签时提示用户先选择标签
      * @modify 20251019 陈凤庆 修复问题 003-1：增加详细调试日志，跟踪切换分组后的状态
+     * @modify 20251019 陈凤庆 修复问题 004：增加更详细的状态检查，防止分组切换后typeid丢失
      * @description 创建新账号项，传递当前分组ID和标签ID到编辑窗口
      */
     const createAccount = () => {
       console.log(`[createAccount] ========== 开始创建账号项 ==========`)
+      console.log(`[createAccount] 🔍 详细状态检查:`)
       console.log(`[createAccount] 当前分组ID: ${currentGroupId.value} (类型: ${typeof currentGroupId.value})`)
       console.log(`[createAccount] 当前标签ID: ${currentTabId.value} (类型: ${typeof currentTabId.value})`)
       console.log(`[createAccount] Store中的分组ID: ${appStore.currentGroupId} (类型: ${typeof appStore.currentGroupId})`)
@@ -1449,9 +1451,21 @@ export default {
       console.log(`[createAccount] 当前标签对象:`, appStore.currentTab)
       console.log(`[createAccount] 标签列表:`, appStore.tabs)
 
+      // 20251019 陈凤庆 新增：检查页签记忆状态
+      console.log(`[createAccount] 📝 页签记忆状态:`)
+      console.log(`[createAccount] 页签记忆数据:`, appStore.groupTabMemory)
+      if (currentGroupId.value) {
+        const rememberedTab = appStore.getRememberedTab(currentGroupId.value)
+        console.log(`[createAccount] 当前分组记忆的页签: ${rememberedTab}`)
+      }
+
       // 20251019 陈凤庆 修复问题 002-1：检查是否选中了标签，如果没有选中标签则提示用户
       if (!currentTabId.value) {
         console.warn(`[createAccount] ⚠️ 未选中标签，无法创建账号`)
+        console.warn(`[createAccount] 可能原因分析:`)
+        console.warn(`  - currentTabId.value: ${currentTabId.value}`)
+        console.warn(`  - appStore.currentTabId: ${appStore.currentTabId}`)
+        console.warn(`  - 标签列表长度: ${appStore.tabs.length}`)
         ElMessage.warning(t('warning.selectTabFirst') || '请先选择一个标签')
         return
       }
@@ -1459,6 +1473,10 @@ export default {
       // 20251019 陈凤庆 修复问题 003-1：验证分组和标签的有效性
       if (!currentGroupId.value) {
         console.error(`[createAccount] ❌ 未选中分组，无法创建账号`)
+        console.error(`[createAccount] 可能原因分析:`)
+        console.error(`  - currentGroupId.value: ${currentGroupId.value}`)
+        console.error(`  - appStore.currentGroupId: ${appStore.currentGroupId}`)
+        console.error(`  - 分组列表长度: ${appStore.groups.length}`)
         ElMessage.error('请先选择一个分组')
         return
       }
@@ -1468,11 +1486,39 @@ export default {
       if (!currentTabExists) {
         console.error(`[createAccount] ❌ 当前标签ID ${currentTabId.value} 不存在于标签列表中`)
         console.error(`[createAccount] 可用标签列表:`, appStore.tabs.map(t => ({id: t.id, name: t.name})))
-        ElMessage.error('当前标签无效，请重新选择标签')
-        return
+        console.error(`[createAccount] 这可能是分组切换后标签状态不同步导致的问题`)
+
+        // 20251019 陈凤庆 新增：尝试自动修复标签状态
+        if (appStore.tabs.length > 0) {
+          const firstTab = appStore.tabs[0]
+          console.warn(`[createAccount] 🔧 尝试自动修复：选择第一个可用标签 ${firstTab.name} (ID: ${firstTab.id})`)
+          appStore.setCurrentTab(firstTab.id)
+          // 重新获取修复后的标签ID
+          const fixedTabId = appStore.currentTabId
+          console.log(`[createAccount] 修复后的标签ID: ${fixedTabId}`)
+
+          if (fixedTabId) {
+            console.log(`[createAccount] ✅ 标签状态修复成功，继续创建账号`)
+          } else {
+            console.error(`[createAccount] ❌ 标签状态修复失败`)
+            ElMessage.error('标签状态异常，请手动重新选择标签')
+            return
+          }
+        } else {
+          ElMessage.error('当前分组没有可用标签，请先创建标签')
+          return
+        }
       }
 
       console.log(`[createAccount] ✅ 验证通过，开始创建账号数据结构`)
+
+      // 20251019 陈凤庆 使用最新的状态值，防止异步更新导致的数据不一致
+      const finalGroupId = appStore.currentGroupId || currentGroupId.value
+      const finalTabId = appStore.currentTabId || currentTabId.value
+
+      console.log(`[createAccount] 🎯 最终使用的ID值:`)
+      console.log(`  - 最终分组ID: ${finalGroupId}`)
+      console.log(`  - 最终标签ID: ${finalTabId}`)
 
       // 20251002 陈凤庆 确保所有ID字段都是字符串类型，新建时id为空字符串，使用typeid字段
       selectedAccount.value = {
@@ -1483,14 +1529,17 @@ export default {
         url: '',
         type: '',
         notes: '',
-        group_id: currentGroupId.value || '', // 20251001 陈凤庆 确保为字符串
-        typeid: currentTabId.value || '', // 20251002 陈凤庆 改为typeid，与后端模型保持一致
+        group_id: finalGroupId || '', // 20251019 陈凤庆 使用最终确定的分组ID
+        typeid: finalTabId || '', // 20251019 陈凤庆 使用最终确定的标签ID，这是关键字段
         icon: '',
         is_favorite: false,
         input_method: 1 // 20251003 陈凤庆 添加输入方式字段，默认为1（默认方式）
       }
 
       console.log(`[createAccount] 创建的账号数据结构:`, selectedAccount.value)
+      console.log(`[createAccount] 🔑 关键字段检查:`)
+      console.log(`  - typeid: ${selectedAccount.value.typeid} (${typeof selectedAccount.value.typeid})`)
+      console.log(`  - group_id: ${selectedAccount.value.group_id} (${typeof selectedAccount.value.group_id})`)
       console.log(`[createAccount] ========== 账号项创建完成，打开编辑窗口 ==========`)
 
       isNewAccount.value = true
@@ -1706,43 +1755,93 @@ export default {
     const handleSaveAccount = async (accountData) => {
       try {
         console.log(`[handleSaveAccount] ========== 开始保存账号 ==========`)
-        console.log(`[handleSaveAccount] 原始账号数据:`, accountData)
+        console.log(`[handleSaveAccount] 📥 原始账号数据:`, accountData)
         console.log(`[handleSaveAccount] 是否为新建账号: ${isNewAccount.value}`)
-        console.log(`[handleSaveAccount] 当前分组ID: ${currentGroupId.value}`)
-        console.log(`[handleSaveAccount] 当前标签ID: ${currentTabId.value}`)
+        console.log(`[handleSaveAccount] 🔍 当前状态快照:`)
+        console.log(`  - 当前分组ID: ${currentGroupId.value} (${typeof currentGroupId.value})`)
+        console.log(`  - 当前标签ID: ${currentTabId.value} (${typeof currentTabId.value})`)
+        console.log(`  - Store分组ID: ${appStore.currentGroupId} (${typeof appStore.currentGroupId})`)
+        console.log(`  - Store标签ID: ${appStore.currentTabId} (${typeof appStore.currentTabId})`)
+        console.log(`  - 标签列表长度: ${appStore.tabs.length}`)
+        console.log(`  - 当前标签对象:`, appStore.currentTab)
 
-        // 20251001 陈凤庆 确保所有ID字段都是字符串类型
+        // 20251019 陈凤庆 新增：检查页签记忆状态，确保数据一致性
+        if (currentGroupId.value) {
+          const rememberedTab = appStore.getRememberedTab(currentGroupId.value)
+          console.log(`[handleSaveAccount] 📝 当前分组记忆的页签: ${rememberedTab}`)
+          console.log(`[handleSaveAccount] 页签记忆与当前状态一致性检查:`)
+          console.log(`  - 记忆页签 === 当前标签ID: ${rememberedTab === currentTabId.value}`)
+          console.log(`  - 记忆页签 === Store标签ID: ${rememberedTab === appStore.currentTabId}`)
+        }
+
+        // 20251019 陈凤庆 增强数据清理逻辑，优先使用Store中的最新状态，并确保字段不为空
         const cleanedData = {
           ...accountData,
           id: accountData.id ? String(accountData.id) : '',
-          group_id: accountData.group_id ? String(accountData.group_id) : '',
-          typeid: accountData.typeid ? String(accountData.typeid) : '' // 20251002 陈凤庆 改为typeid字段
+          // 优先使用Store状态，然后是传入数据，最后是当前状态
+          group_id: String(accountData.group_id || appStore.currentGroupId || currentGroupId.value || ''),
+          typeid: String(accountData.typeid || accountData.type || appStore.currentTabId || currentTabId.value || ''),
+          type: String(accountData.type || accountData.typeid || appStore.currentTabId || currentTabId.value || '')
         }
 
-        console.log('[handleSaveAccount] 清理后的账号数据:', cleanedData)
+        console.log('[handleSaveAccount] 📤 清理后的账号数据:', cleanedData)
+        console.log('[handleSaveAccount] 🔑 关键字段最终检查:')
+        console.log(`  - typeid: "${cleanedData.typeid}" (${typeof cleanedData.typeid}) [长度: ${cleanedData.typeid?.length || 0}]`)
+        console.log(`  - group_id: "${cleanedData.group_id}" (${typeof cleanedData.group_id}) [长度: ${cleanedData.group_id?.length || 0}]`)
+        console.log(`  - title: "${cleanedData.title}" (${typeof cleanedData.title})`)
+        console.log(`  - username: "${cleanedData.username}" (${typeof cleanedData.username})`)
+        console.log(`  - password: ${cleanedData.password ? '***已设置***' : '未设置'} (${typeof cleanedData.password})`)
 
-        // 20251019 陈凤庆 修复问题 003-1：验证关键字段
+        // 20251019 陈凤庆 修复问题 003-1：验证关键字段，增加自动恢复机制
         if (!cleanedData.typeid) {
           console.error('[handleSaveAccount] ❌ typeid字段为空，这会导致保存失败')
-          console.error('[handleSaveAccount] 当前数据状态检查:')
+          console.error('[handleSaveAccount] 🔍 详细诊断信息:')
           console.error('  - cleanedData.typeid:', cleanedData.typeid)
           console.error('  - accountData.typeid:', accountData.typeid)
+          console.error('  - accountData.type:', accountData.type)
           console.error('  - currentTabId.value:', currentTabId.value)
           console.error('  - appStore.currentTabId:', appStore.currentTabId)
-          ElMessage.error('标签信息丢失，请重新选择标签后再保存')
-          return
+          console.error('  - 可用标签列表:', appStore.tabs.map(t => ({id: t.id, name: t.name})))
+
+          // 20251019 陈凤庆 新增：尝试从当前状态恢复typeid
+          const recoveredTypeId = appStore.currentTabId || currentTabId.value
+          if (recoveredTypeId) {
+            console.warn('[handleSaveAccount] 🔧 尝试从当前状态恢复typeid:', recoveredTypeId)
+            cleanedData.typeid = String(recoveredTypeId)
+            cleanedData.type = String(recoveredTypeId)
+            console.log('[handleSaveAccount] ✅ typeid已恢复，继续保存流程')
+          } else {
+            ElMessage.error('标签信息丢失，请重新选择标签后再保存')
+            return
+          }
         }
 
         if (!cleanedData.group_id) {
           console.error('[handleSaveAccount] ❌ group_id字段为空，这会导致保存失败')
-          console.error('[handleSaveAccount] 当前数据状态检查:')
+          console.error('[handleSaveAccount] 🔍 详细诊断信息:')
           console.error('  - cleanedData.group_id:', cleanedData.group_id)
           console.error('  - accountData.group_id:', accountData.group_id)
           console.error('  - currentGroupId.value:', currentGroupId.value)
           console.error('  - appStore.currentGroupId:', appStore.currentGroupId)
-          ElMessage.error('分组信息丢失，请重新选择分组后再保存')
-          return
+          console.error('  - 可用分组列表:', appStore.groups.map(g => ({id: g.id, name: g.name})))
+
+          // 20251019 陈凤庆 新增：尝试从当前状态恢复group_id
+          const recoveredGroupId = appStore.currentGroupId || currentGroupId.value
+          if (recoveredGroupId) {
+            console.warn('[handleSaveAccount] 🔧 尝试从当前状态恢复group_id:', recoveredGroupId)
+            cleanedData.group_id = String(recoveredGroupId)
+            console.log('[handleSaveAccount] ✅ group_id已恢复，继续保存流程')
+          } else {
+            ElMessage.error('分组信息丢失，请重新选择分组后再保存')
+            return
+          }
         }
+
+        // 20251019 陈凤庆 新增：最终数据完整性检查
+        console.log('[handleSaveAccount] 🎯 最终数据完整性检查:')
+        console.log(`  - 所有必填字段都已填写: ${!!(cleanedData.title && cleanedData.username && cleanedData.password && cleanedData.typeid)}`)
+        console.log(`  - typeid有效性: ${cleanedData.typeid && cleanedData.typeid.length > 0}`)
+        console.log(`  - group_id有效性: ${cleanedData.group_id && cleanedData.group_id.length > 0}`)
 
         console.log('[handleSaveAccount] ✅ 关键字段验证通过，开始调用API')
 

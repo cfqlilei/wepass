@@ -18,7 +18,7 @@ param(
 )
 
 # 版本信息
-$script:VERSION = "1.0.7"
+$script:VERSION = "1.0.8"
 $script:APP_NAME = "wepass"
 $script:BUILD_DATE = Get-Date -Format "yyyyMMdd"
 $script:WORKING_DIR = ""
